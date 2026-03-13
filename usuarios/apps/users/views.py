@@ -6,7 +6,9 @@ métodos correspondientes de forma automática.
 """
 
 from rest_framework import viewsets
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from django.contrib.auth import get_user_model
+from .permissions import IsSelfOrAdmin
 from .serializers import UserSerializer
 
 
@@ -22,3 +24,18 @@ class UserViewSet(viewsets.ModelViewSet):
     """
     queryset = User.objects.all()
     serializer_class = UserSerializer
+
+    def get_permissions(self):
+        # Registro publico controlado (create). El resto requiere autenticacion.
+        if self.action == "create":
+            return [AllowAny()]
+
+        # Operaciones globales reservadas a administradores.
+        if self.action in {"list", "destroy"}:
+            return [IsAdminUser()]
+
+        # Acceso a recurso individual solo para duenio o admin.
+        if self.action in {"retrieve", "update", "partial_update"}:
+            return [IsAuthenticated(), IsSelfOrAdmin()]
+
+        return [IsAuthenticated()]
