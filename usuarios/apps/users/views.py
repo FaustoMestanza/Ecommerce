@@ -25,6 +25,11 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
 
+    def get_throttles(self):
+        # Aplica una cuota dedicada para registro publico.
+        self.throttle_scope = "register" if self.action == "create" else None
+        return super().get_throttles()
+
     def get_permissions(self):
         # Registro publico controlado (create). El resto requiere autenticacion.
         if self.action == "create":

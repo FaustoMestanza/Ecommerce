@@ -2,6 +2,14 @@
 
 Este documento describe el proyecto completo, no solo el microservicio de usuarios. La idea es tener una referencia rapida para cualquier desarrollador o agente que entre al repositorio.
 
+## Lectura obligatoria para agentes
+
+Antes de cualquier cambio, leer en este orden:
+
+1. `AGENTS.md`
+2. `CONTEXT.md`
+3. README del microservicio a modificar
+
 ## Vision del proyecto
 
 Ecommerce IA es una arquitectura orientada a microservicios para una plataforma de comercio electronico. Cada dominio del negocio vive en un servicio independiente, con su propio ciclo de build, test y despliegue.
@@ -70,6 +78,41 @@ Adicionalmente, cada microservicio Django debe mantener esta base:
 - base de cache preparada: Redis por `REDIS_URL` con fallback a `LocMemCache` para desarrollo/CI;
 - comentarios breves en componentes clave (modelos, vistas, serializers, entrypoint) para explicar responsabilidad tecnica.
 
+## Estandar de seguridad obligatorio (todos los microservicios)
+
+Cada microservicio nuevo debe implementar estas medidas desde el primer commit, usando `usuarios` como referencia:
+
+- autenticacion JWT activa en DRF (`JWTAuthentication`) y permisos por defecto `IsAuthenticated`;
+- endpoints publicos (por ejemplo registro/login) deben declarar permisos explicitos y no dejar acceso abierto por accidente;
+- rate limiting obligatorio en DRF con `DEFAULT_THROTTLE_CLASSES`: `AnonRateThrottle`, `UserRateThrottle`, `ScopedRateThrottle`;
+- `DEFAULT_THROTTLE_RATES` minimo: `anon=60/min`, `user=120/min`, y scope sensible `register=5/min`;
+- operaciones publicas sensibles deben usar `throttle_scope` dedicado (ejemplo: `register`);
+- `SECRET_KEY` nunca hardcodeado en produccion (solo variable de entorno);
+- `DEBUG=False` en produccion;
+- `ALLOWED_HOSTS` sin wildcard en produccion (no usar `"*"`);
+- cookies seguras habilitadas en produccion: `SESSION_COOKIE_SECURE=True`, `CSRF_COOKIE_SECURE=True`;
+- mantener `SECURE_CONTENT_TYPE_NOSNIFF=True` y `X_FRAME_OPTIONS="DENY"`;
+- para despliegue detras de proxy HTTPS: `SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")`.
+
+Variables de entorno recomendadas para seguridad (runtime):
+
+- `JWT_SIGNING_KEY` (obligatoria en produccion; no reutilizar secretos debiles);
+- `JWT_ALGORITHM` (default `HS256`, cambiar solo si hay estrategia definida);
+- `JWT_ACCESS_MINUTES` (token corto, default recomendado: 30);
+- `THROTTLE_ANON_RATE` (default `60/min`);
+- `THROTTLE_USER_RATE` (default `120/min`);
+- `THROTTLE_REGISTER_RATE` (default `5/min`);
+- `DJANGO_SECRET_KEY` (obligatoria en produccion);
+- `DJANGO_DEBUG` (`False` en produccion);
+- `DJANGO_ALLOWED_HOSTS` (lista explicita de dominios).
+
+Checklist minimo de pruebas de seguridad por microservicio:
+
+- test de permisos para endpoints privados (anonimo debe recibir `401/403`);
+- test de acceso por rol/propietario cuando aplique;
+- test de rate limiting validando respuesta `429` al exceder cuota en endpoint sensible;
+- test de registro/login para asegurar que el endpoint publico funciona dentro del limite configurado.
+
 ## Estandar de entorno local (VS Code + venv)
 
 Para evitar errores de imports (por ejemplo `rest_framework` no encontrado), cada microservicio debe manejar su entorno virtual propio dentro de su carpeta:
@@ -88,7 +131,7 @@ Regla para VS Code cuando se trabaja desde la raiz del monorepo:
 Cada microservicio tiene su propio pipeline (`ci-*.yml`) y sigue este patron:
 
 - `pull_request` a `main`: ejecuta solo tests;
-- `push` a `main`: ejecuta tests y, si pasan, publica imagen Docker;
+- `push` a `main`: ejecuta tests y, si pasan, publica imagen Docker y dispara despliegue en Render;
 - la imagen se construye una sola vez en la etapa de publicacion (`push: true`), sin build duplicado.
 
 Jobs esperados por pipeline:
@@ -96,6 +139,7 @@ Jobs esperados por pipeline:
 - `TESTS`: instalar dependencias, migrar y ejecutar `python manage.py test`;
 - `DOCKER HUB`: login con `DOCKERHUB_USERNAME` y `DOCKERHUB_TOKEN`;
 - `DOCKER IMAGE`: build y push de imagen del microservicio.
+- `RENDER DEPLOY`: trigger de deploy via hook (`RENDER_DEPLOY_HOOK_USUARIOS`).
 
 Secrets minimos en GitHub Actions:
 
@@ -103,6 +147,7 @@ Secrets minimos en GitHub Actions:
 - `DOCKERHUB_TOKEN`
 - `DJANGO_SECRET_KEY`
 - `JWT_SIGNING_KEY` (recomendado cuando el emisor de JWT sea otro servicio)
+- `RENDER_DEPLOY_HOOK_USUARIOS` (URL de Deploy Hook del servicio en Render)
 
 Variables de entorno recomendadas para runtime (PaaS):
 
@@ -114,6 +159,7 @@ Variables de entorno recomendadas para runtime (PaaS):
 Nota operativa:
 
 - `entrypoint.sh` no necesita cambios para Neon; al iniciar ejecuta migraciones usando la DB definida en `DATABASE_URL`.
+- En Render, Gunicorn debe respetar el puerto dinamico via variable `PORT`.
 
 ## Flujo Git/GitHub recomendado
 

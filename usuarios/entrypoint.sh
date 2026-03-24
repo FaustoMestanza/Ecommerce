@@ -31,4 +31,5 @@ else
 fi
 
 echo "Starting Gunicorn..."
-exec gunicorn usuarios_service.wsgi:application --bind 0.0.0.0:8000
+PORT_TO_BIND="${PORT:-8000}"
+exec gunicorn usuarios_service.wsgi:application --bind "0.0.0.0:${PORT_TO_BIND}"

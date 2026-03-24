@@ -59,3 +59,13 @@ jobs:
           context: ./usuarios
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/usuarios-service:latest
+
+      - name: RENDER | Trigger deploy
+        env:
+          RENDER_DEPLOY_HOOK_USUARIOS: ${{ secrets.RENDER_DEPLOY_HOOK_USUARIOS }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_USUARIOS" ]; then
+            echo "Missing RENDER_DEPLOY_HOOK_USUARIOS secret"
+            exit 1
+          fi
+          curl --fail --show-error --silent -X POST "$RENDER_DEPLOY_HOOK_USUARIOS"

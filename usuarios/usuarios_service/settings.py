@@ -2,6 +2,7 @@ import os
 import sys
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 import dj_database_url
 
@@ -9,7 +10,28 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def env_bool(name: str, default: str = "False") -> bool:
-    return os.environ.get(name, default).lower() == "true"
+    value = os.environ.get(name, default)
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def env_allowed_hosts(name: str, default: str) -> list[str]:
+    raw = os.environ.get(name, default)
+    hosts: list[str] = []
+    for item in raw.split(","):
+        candidate = item.strip()
+        if not candidate:
+            continue
+        # Permite pegar URL completa de Render y normaliza a host.
+        if "://" in candidate:
+            parsed = urlparse(candidate)
+            candidate = parsed.hostname or ""
+        else:
+            # Limpia rutas accidentales: ejemplo "app.onrender.com/".
+            candidate = candidate.split("/")[0]
+        candidate = candidate.strip()
+        if candidate:
+            hosts.append(candidate)
+    return hosts
 
 
 SECRET_KEY = os.environ.get(
@@ -17,9 +39,10 @@ SECRET_KEY = os.environ.get(
     "change-this-in-prod-please-use-a-strong-secret-key",
 )
 
-DEBUG = env_bool("DJANGO_DEBUG", "True")
+DEBUG = env_bool("DJANGO_DEBUG", "False")
 
-ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "*").split(",")
+default_hosts = "localhost,127.0.0.1" if DEBUG else ""
+ALLOWED_HOSTS = env_allowed_hosts("DJANGO_ALLOWED_HOSTS", default_hosts)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -145,6 +168,16 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": os.environ.get("THROTTLE_ANON_RATE", "60/min"),
+        "user": os.environ.get("THROTTLE_USER_RATE", "120/min"),
+        "register": os.environ.get("THROTTLE_REGISTER_RATE", "5/min"),
+    },
 }
 
 SIMPLE_JWT = {
@@ -156,8 +189,25 @@ SIMPLE_JWT = {
 }
 
 # Endurecimiento basico para despliegue detras de proxy HTTPS (PaaS).
+PRODUCTION_HARDENING_DEFAULT = not DEBUG and not RUNNING_TESTS
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", "False")
-CSRF_COOKIE_SECURE = env_bool("DJANGO_CSRF_COOKIE_SECURE", "False")
+SECURE_SSL_REDIRECT = env_bool(
+    "DJANGO_SECURE_SSL_REDIRECT", "True" if PRODUCTION_HARDENING_DEFAULT else "False"
+)
+SESSION_COOKIE_SECURE = env_bool(
+    "DJANGO_SESSION_COOKIE_SECURE", "True" if PRODUCTION_HARDENING_DEFAULT else "False"
+)
+CSRF_COOKIE_SECURE = env_bool(
+    "DJANGO_CSRF_COOKIE_SECURE", "True" if PRODUCTION_HARDENING_DEFAULT else "False"
+)
+SECURE_HSTS_SECONDS = int(
+    os.environ.get("DJANGO_SECURE_HSTS_SECONDS", "31536000" if PRODUCTION_HARDENING_DEFAULT else "0")
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
+    "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS", "True" if PRODUCTION_HARDENING_DEFAULT else "False"
+)
+SECURE_HSTS_PRELOAD = env_bool(
+    "DJANGO_SECURE_HSTS_PRELOAD", "True" if PRODUCTION_HARDENING_DEFAULT else "False"
+)
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"

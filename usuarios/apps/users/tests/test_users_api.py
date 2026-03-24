@@ -1,5 +1,6 @@
 from django.test import TestCase
 from django.urls import reverse
+from django.core.cache import cache
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import get_user_model
@@ -74,3 +75,21 @@ class UsersAPITest(TestCase):
         response = self.client.post(url, payload, format="json")
         self.assertEqual(response.status_code, 201)
         self.assertTrue(User.objects.filter(username="newuser").exists())
+
+    def test_registration_is_rate_limited(self):
+        cache.clear()
+        url = reverse("user-list")
+
+        responses = []
+        for i in range(6):
+            responses.append(
+                self.client.post(
+                    url,
+                    {"username": f"throttle_{i}", "password": "pass12345"},
+                    format="json",
+                )
+            )
+
+        for response in responses[:5]:
+            self.assertEqual(response.status_code, 201)
+        self.assertEqual(responses[5].status_code, 429)
