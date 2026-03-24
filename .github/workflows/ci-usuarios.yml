@@ -60,7 +60,13 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/usuarios-service:latest
 
-      - name: RENDER | Trigger deploy
+  deploy_render:
+    name: RENDER | Deploy Usuarios
+    runs-on: ubuntu-latest
+    needs: publish
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: RENDER | Trigger deploy hook
         env:
           RENDER_DEPLOY_HOOK_USUARIOS: ${{ secrets.RENDER_DEPLOY_HOOK_USUARIOS }}
         run: |
