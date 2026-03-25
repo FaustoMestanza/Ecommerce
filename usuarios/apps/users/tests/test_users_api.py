@@ -1,3 +1,5 @@
+import os
+
 from django.test import TestCase
 from django.urls import reverse
 from django.core.cache import cache
@@ -12,6 +14,8 @@ User = get_user_model()
 class UsersAPITest(TestCase):
     def setUp(self):
         self.client = APIClient()
+        self.internal_token = "internal-test-token"
+        os.environ["USUARIOS_SERVICE_TOKEN"] = self.internal_token
         self.admin = User.objects.create_superuser(
             username="admin",
             email="admin@test.com",
@@ -27,6 +31,9 @@ class UsersAPITest(TestCase):
             email="bob@test.com",
             password="bobpass123",
         )
+
+    def tearDown(self):
+        os.environ.pop("USUARIOS_SERVICE_TOKEN", None)
 
     def auth(self, user):
         token = str(RefreshToken.for_user(user).access_token)
@@ -93,3 +100,32 @@ class UsersAPITest(TestCase):
         for response in responses[:5]:
             self.assertEqual(response.status_code, 201)
         self.assertEqual(responses[5].status_code, 429)
+
+    def test_internal_auth_user_requires_internal_token(self):
+        url = reverse("internal-auth-user")
+        response = self.client.post(
+            url,
+            {"username": "alice", "password": "alicepass123"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_internal_auth_user_with_valid_credentials(self):
+        url = reverse("internal-auth-user")
+        response = self.client.post(
+            url,
+            {"username": "alice", "password": "alicepass123"},
+            format="json",
+            HTTP_X_INTERNAL_SERVICE_TOKEN=self.internal_token,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["username"], "alice")
+
+    def test_internal_user_by_id(self):
+        url = reverse("internal-user-by-id", kwargs={"user_id": self.alice.pk})
+        response = self.client.get(
+            url,
+            HTTP_X_INTERNAL_SERVICE_TOKEN=self.internal_token,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["id"], self.alice.pk)

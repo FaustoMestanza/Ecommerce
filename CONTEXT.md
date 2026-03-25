@@ -26,9 +26,9 @@ Servicios contemplados en la arquitectura:
 
 ## Estado actual del repositorio
 
-A la fecha, en este repositorio solo esta implementado de forma completa el servicio `usuarios`.
+A la fecha, en este repositorio estan implementados de forma completa los servicios `usuarios` y `autenticacion`.
 
-Los servicios `productos`, `inventario`, `autenticacion` y `carrito` ya estan considerados en CI/CD (workflows de GitHub Actions), pero sus carpetas aun no existen en el arbol del proyecto.
+Los servicios `productos`, `inventario` y `carrito` ya estan considerados en CI/CD (workflows de GitHub Actions), pero sus carpetas aun no existen en el arbol del proyecto.
 
 ## Estructura actual
 
@@ -44,6 +44,13 @@ Ecommerce IA/
 |-- usuarios/
 |   |-- apps/users/
 |   |-- usuarios_service/
+|   |-- entrypoint.sh
+|   |-- Dockerfile
+|   |-- requirements.txt
+|   `-- manage.py
+|-- autenticacion/
+|   |-- apps/authentication/
+|   |-- autenticacion_service/
 |   |-- entrypoint.sh
 |   |-- Dockerfile
 |   |-- requirements.txt
@@ -171,7 +178,7 @@ Para mantener orden y despliegue controlado:
 4. Validar que tests de CI pasen.
 5. Hacer merge a `main` para activar publicacion de imagen.
 
-## Microservicio actualmente implementado: usuarios
+## Microservicios actualmente implementados: usuarios y autenticacion
 
 Responsabilidades actuales de `usuarios`:
 
@@ -190,6 +197,20 @@ Rutas y componentes clave:
 - `usuarios/apps/users/tests/test_users_api.py`: pruebas basicas del API.
 - `usuarios/entrypoint.sh`: inicializacion de produccion (migraciones, superusuario opcional y arranque).
 
+Responsabilidades actuales de `autenticacion`:
+
+- Registro de usuarios (`POST /api/auth/register/`) delegado al micro `usuarios`.
+- Login JWT (`POST /api/auth/login/`) con validacion de credenciales contra `usuarios` y entrega de `access` y `refresh`.
+- Renovacion de token (`POST /api/auth/refresh/`) sin reenviar credenciales.
+- Endpoint privado de identidad (`GET /api/auth/me/`) protegido por JWT, con resolucion de perfil via `usuarios`.
+- Configuracion de seguridad DRF/JWT y hardening base equivalente al estandar de `usuarios`.
+- Pruebas de seguridad en `autenticacion/apps/authentication/tests/test_auth_api.py`.
+
+Variables de integracion entre `autenticacion` y `usuarios`:
+
+- `USUARIOS_SERVICE_URL`: URL base de `usuarios` (ej. `http://usuarios:8000`).
+- `USUARIOS_SERVICE_TOKEN`: secreto compartido para endpoints internos (`X-Internal-Service-Token`).
+
 ## Ejecucion local (servicio usuarios)
 
 1. Entrar a `usuarios/`.
@@ -201,4 +222,4 @@ Rutas y componentes clave:
 
 ## Resumen
 
-Este repositorio define una arquitectura de microservicios para ecommerce con estandares base de Django y CI/CD. `usuarios` es el servicio implementado y funciona como plantilla tecnica para construir el resto de microservicios con la misma estructura.
+Este repositorio define una arquitectura de microservicios para ecommerce con estandares base de Django y CI/CD. Actualmente `usuarios` y `autenticacion` estan implementados y sirven como plantilla tecnica para construir el resto de microservicios con la misma estructura.
